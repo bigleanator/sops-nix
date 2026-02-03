@@ -7,7 +7,7 @@
 
 let
   cfg = config.sops;
-  sops-install-secrets = (pkgs.callPackage ../.. { }).sops-install-secrets;
+  sops-install-secrets = cfg.package;
   secretType = lib.types.submodule (
     { name, ... }:
     {
@@ -25,7 +25,7 @@ let
           default = if cfg.defaultSopsKey != null then cfg.defaultSopsKey else name;
           description = ''
             Key used to lookup in the sops file.
-            No tested data structures are supported right now.
+            To access nested data structures, use / as a separator.
             This option is ignored if format is binary.
             "" means whole file.
           '';
@@ -231,6 +231,15 @@ in
       '';
     };
 
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = (pkgs.callPackage ../.. { }).sops-install-secrets;
+      defaultText = lib.literalExpression "(pkgs.callPackage ../.. {}).sops-install-secrets";
+      description = ''
+        sops-install-secrets package to use.
+      '';
+    };
+
     age = {
       keyFile = lib.mkOption {
         type = lib.types.nullOr pathNotInStore;
@@ -238,6 +247,14 @@ in
         example = "/home/someuser/.age-key.txt";
         description = ''
           Path to age key file used for sops decryption.
+        '';
+      };
+
+      plugins = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = [ ];
+        description = ''
+          List of plugins to use for sops decryption.
         '';
       };
 
@@ -276,6 +293,15 @@ in
     };
 
     gnupg = {
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.gnupg;
+        defaultText = lib.literalExpression "pkgs.gnupg";
+        description = ''
+          The gnupg package to use for sops operations.
+        '';
+      };
+
       home = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -349,12 +375,19 @@ in
     sops.environment = {
       SOPS_GPG_EXEC = lib.mkMerge [
         (lib.mkIf (cfg.gnupg.home != null || cfg.gnupg.sshKeyPaths != [ ]) (
-          lib.mkDefault "${pkgs.gnupg}/bin/gpg"
+          lib.mkDefault "${cfg.gnupg.package}/bin/gpg"
         ))
         (lib.mkIf cfg.gnupg.qubes-split-gpg.enable (
           lib.mkDefault config.home.sessionVariables.SOPS_GPG_EXEC
         ))
       ];
+
+      PATH =
+        let
+          pluginPaths = lib.makeBinPath cfg.age.plugins;
+          systemPaths = lib.optionalString pkgs.stdenv.isDarwin "/usr/bin:/bin:/usr/sbin:/sbin";
+        in
+        lib.concatStringsSep ":" (lib.filter (p: p != "") [ pluginPaths systemPaths ]);
 
       QUBES_GPG_DOMAIN = lib.mkIf cfg.gnupg.qubes-split-gpg.enable (
         lib.mkDefault cfg.gnupg.qubes-split-gpg.domain

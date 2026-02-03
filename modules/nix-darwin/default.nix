@@ -323,6 +323,14 @@ in
           ssh-to-age before they are fed to age.
         '';
       };
+
+      plugins = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = [ ];
+        description = ''
+          List of plugins to use for sops decryption.
+        '';
+      };
     };
 
     gnupg = {
@@ -332,6 +340,15 @@ in
         example = "/root/.gnupg";
         description = ''
           Path to gnupg database directory containing the key for decrypting the sops file.
+        '';
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.gnupg;
+        defaultText = lib.literalExpression "pkgs.gnupg";
+        description = ''
+          The gnupg package to use for sops operations.
         '';
       };
 
@@ -400,8 +417,9 @@ in
 
     {
       sops.environment.SOPS_GPG_EXEC = lib.mkIf (cfg.gnupg.home != null || cfg.gnupg.sshKeyPaths != [ ]) (
-        lib.mkDefault "${pkgs.gnupg}/bin/gpg"
+        lib.mkDefault "${cfg.gnupg.package}/bin/gpg"
       );
+      sops.environment.PATH = lib.mkIf (cfg.age.plugins != [ ]) (lib.makeBinPath cfg.age.plugins);
     }
   ];
 }

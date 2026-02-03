@@ -57,7 +57,6 @@
             sops-init-gpg-key
             sops-pgp-hook
             sops-import-keys-hook
-            sops-ssh-to-age
             ;
           # backward compatibility
           inherit (prev) ssh-to-pgp;
@@ -71,6 +70,7 @@
         default = self.homeManagerModules.sops;
       };
       homeManagerModule = self.homeManagerModules.sops;
+      homeModules = self.homeManagerModules;
       darwinModules = {
         sops = ./modules/nix-darwin;
         default = self.darwinModules.sops;
@@ -86,7 +86,10 @@
             packages-stable = import ./default.nix {
               pkgs = privateInputs.nixpkgs-stable.legacyPackages.${system};
             };
-            dropOverride = attrs: nixpkgs.lib.removeAttrs attrs [ "override" ];
+            dropOverride = attrs: nixpkgs.lib.removeAttrs attrs [
+              "override"
+              "overrideDerivation"
+            ];
             tests = dropOverride (pkgs.callPackage ./checks/nixos-test.nix { });
             tests-stable = dropOverride (
               privateInputs.nixpkgs-stable.legacyPackages.${system}.callPackage ./checks/nixos-test.nix { }
@@ -94,7 +97,7 @@
             suffix-version =
               version: attrs:
               nixpkgs.lib.mapAttrs' (name: value: nixpkgs.lib.nameValuePair (name + version) value) attrs;
-            suffix-stable = suffix-version "-24_05";
+            suffix-stable = suffix-version "-25_05";
           in
           {
             home-manager = self.legacyPackages.${system}.homeConfigurations.sops.activation-script;
@@ -144,13 +147,16 @@
                 nix --extra-experimental-features "nix-command flakes" hash path ./dev/private | tr -d '\n' > ./dev/private.narHash
               ''}";
             };
+            unit-tests = {
+              type = "app";
+              program = "${pkgs.callPackage ./pkgs/unit-tests.nix { }}/bin/unit-tests";
+            };
           }
         );
 
         devShells = eachSystem (
           { pkgs, ... }:
           {
-            unit-tests = pkgs.callPackage ./pkgs/unit-tests.nix { };
             default = pkgs.callPackage ./shell.nix { };
           }
         );
